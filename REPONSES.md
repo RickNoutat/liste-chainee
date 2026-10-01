@@ -103,3 +103,34 @@ make: `demo' is up to date.
 | --- | --- |
 | A | `make` compare les dates de modification. Pour chaque cible, il regarde si le fichier existe et s'il est plus récent que toutes ses dépendances. `main.o` est plus récent que `main.c` et `liste.h`, `liste.o` plus récent que `liste.c` et `liste.h`, et `demo` plus récent que les deux `.o` : tout est à jour, aucune commande n'a besoin d'être relancée. |
 | B (message exact) | Avec GNU Make 3.81 (macOS), **aucun message d'erreur** : `make: Nothing to be done for 'demo'.` et le code de sortie vaut 0. Sur un dossier propre (`make clean && make`), make compile `main.o` et `liste.o` mais ne produit jamais `demo` : la ligne indentée par des espaces est ignorée sans avertissement et la règle `demo` se retrouve sans commande (`make -p` le confirme). Avec GNU Make 4.x (Linux), on obtient à la place l'erreur attendue `Makefile:2: *** missing separator.  Stop.`. Dans les deux cas, la ligne n'est pas reconnue comme une commande ; la version d'Apple est simplement plus traîtresse puisqu'elle échoue en silence. |
+
+## Exercice 5 - La dépendance au fichier d'en-tête
+
+| Étape | Ce que make recompile |
+| --- | --- |
+| 2, avec la dépendance | `main.o` **et** `liste.o`, puis l'édition de liens de `demo` (3 commandes) |
+| 4, sans la dépendance | `liste.o` seulement, puis l'édition de liens de `demo` (2 commandes) : `main.o` n'est pas recompilé |
+
+| Question | Réponse |
+| --- | --- |
+| A | Avec la dépendance, modifier `liste.h` recompile les deux `.c` qui l'incluent. Sans elle, make ne sait pas que `main.c` utilise `liste.h` : il ne regarde que la date de `main.c`, qui n'a pas changé, et garde l'ancien `main.o`. Seul `liste.o` est reconstruit, et l'exécutable mélange un objet à jour et un objet périmé. make ne lit pas le code : il ne connaît que les dépendances qu'on lui écrit. |
+| B | Un exécutable incohérent : `liste.o` est compilé avec la nouvelle structure, `main.o` avec l'ancienne. Les deux ne sont plus d'accord sur la taille d'un `Maillon` (`sizeof`) ni sur la position (le décalage) de chaque champ. Aucune erreur ni aucun avertissement : l'éditeur de liens ne vérifie que les **noms** des symboles, jamais les types. Dès que `main.c` lit un champ ou alloue un `Maillon`, il lit au mauvais endroit ou alloue trop peu : comportement indéfini, bug silencieux. |
+
+Expérience faite pour la question B, sur une copie jetable : Makefile fautif, et une
+ligne ajoutée dans `main.c` pour afficher `liste->valeur`. On ajoute ensuite `int id;`
+avant `valeur` dans `Maillon`, puis on lance `make` : seul `liste.c` est recompilé.
+
+```
+avant : tete      : 50 (taille Maillon vue par main : 16)
+apres : tete      : 0 (taille Maillon vue par main : 16)
+```
+
+`main.o` lit toujours la valeur au décalage 0, où se trouve maintenant `id`. La liste
+contient bien 50, mais `main` affiche 0. La taille reste 16 octets uniquement grâce au
+remplissage d'alignement : avec un champ plus gros, elle changerait aussi.
+
+Dépendance rétablie, puis Makefile remplacé par la version complète (variables
+`CC`/`CFLAGS`/`OBJ`, règle générique `%.o: %.c liste.h`). Vérifications : même
+résultat qu'avant (`make clean && make` lance les 3 mêmes commandes, avec en plus un
+`-o main.o` explicite), `make` relancé affiche `` `demo' is up to date ``,
+`touch liste.h` recompile les deux `.o`, et `touch main.c` ne recompile que `main.o`.
