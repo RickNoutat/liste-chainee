@@ -57,3 +57,25 @@ liberee
 | --- | --- |
 | A | Deux : `main.o` et `liste.o`, un par fichier `.c`. Il n'y a pas de `liste.h.o`, car un `.h` ne se compile jamais seul. Ce n'est pas une unité de compilation : le préprocesseur recopie son texte dans chaque `.c` qui l'inclut, et c'est ce `.c` qui est compilé. Le `.h` ne contient d'ailleurs que des déclarations (type, prototypes), qui ne produisent aucun code machine. |
 | B | Elle recompile **tous** les `.c` à chaque fois, même ceux qui n'ont pas changé, et jette les `.o` intermédiaires (fichiers temporaires effacés aussitôt). Rien n'est réutilisable : modifier une ligne de `main.c` oblige à recompiler aussi `liste.c`. Sur un projet de centaines de fichiers, cela fait passer une recompilation de quelques secondes à plusieurs minutes. En deux temps, on ne recompile que le `.c` modifié et on relie avec les `.o` déjà présents (c'est ce que `make` automatisera). Elle mélange aussi les deux phases : on voit moins facilement si une erreur vient du compilateur ou de l'éditeur de liens. |
+
+## Exercice 3 - Provoquer les trois erreurs classiques
+
+| Cas | Premier message exact | Compilation ou lien |
+| --- | --- | --- |
+| 1 | `Undefined symbols for architecture arm64: "_liste_afficher", referenced from: _main in main.o` puis `ld: symbol(s) not found for architecture arm64` | Lien |
+| 2 | `main.c:5:5: error: use of undeclared identifier 'Maillon'` (13 erreurs au total) | Compilation |
+| 3 | `./liste.h:4:16: error: redefinition of 'Maillon'` | Compilation |
+
+À titre indicatif, sous GCC/Linux on obtiendrait plutôt :
+`undefined reference to 'liste_inserer'` suivi de `collect2: error: ld returned 1 exit status`
+(cas 1), `error: unknown type name 'Maillon'` (cas 2) et
+`error: redefinition of 'struct Maillon'` (cas 3).
+
+| Question | Réponse |
+| --- | --- |
+| 1 | Le cas 1. Plusieurs indices : la commande `gcc -o demo main.o` ne compile rien, elle ne fait que relier des `.o` ; le message est signé `ld` (« linker command failed », sous Linux `collect2: ... ld returned 1`) ; il ne cite aucun fichier source ni numéro de ligne, seulement un fichier objet (`main.o`) et des **symboles** (`_liste_afficher`, avec le `_` ajouté par macOS). Le compilateur avait accepté `main.c` puisque les prototypes étaient là : c'est seulement au moment d'assembler qu'on découvre qu'aucun `.o` ne contient le corps de ces fonctions. |
+| 2 | Le premier : `use of undeclared identifier 'Maillon'` (GCC : `unknown type name 'Maillon'`). Il désigne la vraie cause : le type n'est pas connu, donc le `.h` qui le définit n'est pas inclus. Les douze autres en découlent : la déclaration de `liste` ayant échoué, chaque usage de `liste` est « undeclared », et les fonctions `liste_*` sont inconnues parce que leurs prototypes étaient dans le même `.h`. On corrige la première erreur, toutes les autres disparaissent : il faut toujours lire la première erreur en premier. |
+| 3 | Dès qu'un `.h` en inclut un autre. Par exemple un second module `pile.h` dont les prototypes utilisent `Maillon` et qui fait donc `#include "liste.h"` : si `main.c` inclut à la fois `liste.h` et `pile.h`, `liste.h` est recopié deux fois dans la même unité de compilation sans que personne ait écrit deux fois la même ligne. Dans notre projet, chaque `.c` inclut `liste.h` une seule fois, et l'inclure dans deux `.c` différents ne pose aucun problème puisqu'ils sont compilés séparément. |
+
+Code rétabli (`git checkout main.c liste.h`), puis recompilé de zéro avec
+`-Wall -Wextra -Werror` : aucun avertissement, même sortie qu'à l'exercice 2.
