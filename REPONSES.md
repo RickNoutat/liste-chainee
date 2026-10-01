@@ -134,3 +134,27 @@ Dépendance rétablie, puis Makefile remplacé par la version complète (variabl
 résultat qu'avant (`make clean && make` lance les 3 mêmes commandes, avec en plus un
 `-o main.o` explicite), `make` relancé affiche `` `demo' is up to date ``,
 `touch liste.h` recompile les deux `.o`, et `touch main.c` ne recompile que `main.o`.
+
+## Exercice 6 - Trouver une fuite sans aucun outil
+
+Compteur ajouté en haut de `liste.c` (`static int blocs`, `suivi_malloc` incrémente si
+`p != NULL`, `suivi_free` décrémente si `p != NULL`). `liste_blocs_en_circulation`
+est déclarée dans `liste.h` et appelée dans `main.c`.
+
+Fuite introduite : une seconde liste `autre` de trois éléments (1, 2, 3), construite
+juste après la première et jamais libérée. Aucun avertissement du compilateur, même
+avec `-Werror`, et code de sortie 0 : seul le compteur la voit.
+
+| Mesure | Sans la fuite | Avec la fuite |
+| --- | --- | --- |
+| Compteur après construction | 5 | 8 |
+| Compteur après libération | 0 | 3 |
+
+Correction : ajout de `liste_liberer(autre);` à côté de `liste_liberer(liste);`.
+Le compteur affiche alors 8 après construction et **0** après libération.
+
+| Question | Réponse |
+| --- | --- |
+| A | `static` donne à ces noms une portée limitée au fichier : ils n'existent pas pour l'éditeur de liens en dehors de `liste.c`. (1) **Encapsulation** : personne d'autre ne peut écrire `blocs = 0;` ni appeler `suivi_free` sur un pointeur obtenu par un `malloc` ordinaire, ce qui fausserait le compte. Le seul accès public est la lecture via `liste_blocs_en_circulation()`. (2) **Pas de collision de noms** : un autre module peut avoir son propre `blocs` ou son propre `suivi_malloc` sans conflit au lien. (3) Une variable **définie** dans un `.h` (`int blocs = 0;`) serait définie dans chaque `.o` qui l'inclut, d'où une erreur `duplicate symbol` au lien. Ce sont des détails d'implémentation : ils n'ont rien à faire dans l'interface publique. |
+| B | Le compteur mentirait, alors qu'il doit toujours valoir « nombre de blocs réellement détenus ». Sans le test dans `suivi_malloc`, un `malloc` raté (qui renvoie `NULL`) compterait un bloc qui n'existe pas : on verrait une fuite fantôme. Sans le test dans `suivi_free`, `free(NULL)` est légal et ne fait rien, mais il ferait baisser le compteur : une vraie fuite pourrait alors être **masquée** (une fuite plus un `free(NULL)` donnent 0, « tout est rendu »), et le compteur pourrait même devenir négatif. |
+| C | Non : il dit **combien** de blocs manquent (3), jamais **où** ils ont été alloués. Avec ce seul outil, on procède par dichotomie : afficher `liste_blocs_en_circulation()` après chaque construction et après chaque libération, puis vérifier que chaque `liste_liberer(x)` fait bien baisser le compteur de `liste_longueur(x)`. La structure dont la construction a fait monter le compteur sans qu'aucune libération ne le fasse redescendre est la coupable. Ici, 3 blocs manquants et une seule liste de 3 éléments désignent directement `autre`. Sur un vrai programme, on rétrécit la zone pas à pas. |
