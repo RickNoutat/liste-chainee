@@ -79,3 +79,27 @@ liberee
 
 Code rétabli (`git checkout main.c liste.h`), puis recompilé de zéro avec
 `-Wall -Wextra -Werror` : aucun avertissement, même sortie qu'à l'exercice 2.
+
+## Exercice 4 - Écrire un premier Makefile
+
+Version de make : GNU Make 3.81, celle fournie par Apple.
+
+`make clean` puis `make` :
+
+```
+rm -f main.o liste.o demo
+gcc -Wall -Wextra -std=c11 -g -c main.c
+gcc -Wall -Wextra -std=c11 -g -c liste.c
+gcc -Wall -Wextra -std=c11 -g -o demo main.o liste.o
+```
+
+Second `make` sans modification :
+
+```
+make: `demo' is up to date.
+```
+
+| Question | Réponse |
+| --- | --- |
+| A | `make` compare les dates de modification. Pour chaque cible, il regarde si le fichier existe et s'il est plus récent que toutes ses dépendances. `main.o` est plus récent que `main.c` et `liste.h`, `liste.o` plus récent que `liste.c` et `liste.h`, et `demo` plus récent que les deux `.o` : tout est à jour, aucune commande n'a besoin d'être relancée. |
+| B (message exact) | Avec GNU Make 3.81 (macOS), **aucun message d'erreur** : `make: Nothing to be done for 'demo'.` et le code de sortie vaut 0. Sur un dossier propre (`make clean && make`), make compile `main.o` et `liste.o` mais ne produit jamais `demo` : la ligne indentée par des espaces est ignorée sans avertissement et la règle `demo` se retrouve sans commande (`make -p` le confirme). Avec GNU Make 4.x (Linux), on obtient à la place l'erreur attendue `Makefile:2: *** missing separator.  Stop.`. Dans les deux cas, la ligne n'est pas reconnue comme une commande ; la version d'Apple est simplement plus traîtresse puisqu'elle échoue en silence. |
